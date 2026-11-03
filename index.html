@@ -77,8 +77,10 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       <div class="guide2">
         <div><b>◀ ▶</b>차선 바꾸기</div>
         <div><b>🧽</b>꾹 눌러 와이퍼</div>
+        <div><b>🔥</b>열기 차면 잠깐 못 씀</div>
         <div><b>📯</b>경적 (↑ 키)</div>
-        <div><b>❤️</b>목숨 3개</div>
+        <div><b>❤️</b>하트 먹으면 목숨 +1</div>
+        <div><b>🧴</b>워셔액 먹으면 깨끗</div>
       </div>
       <p class="soundTip">🔊 소리를 켜고 하세요</p>
       <button class="go" id="startBtn">출발</button>
@@ -160,6 +162,11 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     ONCOMING_MAX: 22,   // 맞은편 차 간격 최대(초)
     HORN_COOLDOWN: 10,  // 경적 쿨타임(초)
     FLEE_SPEED: 750,    // 경적에 놀란 고라니가 옆으로 도망가는 속도 (px/초)
+    NEAR_TIME: 0.4,     // 부딪히기 이 시간(초) 안에 피하면 아슬아슬 보너스
+    NEAR_BONUS: 2,      // 아슬아슬 보너스 점수
+    WASHER_FIRST: 12,   // 첫 워셔액이 나올 수 있는 시간(초)
+    WASHER_MIN: 20,     // 워셔액 간격 최소(초)
+    WASHER_MAX: 35,     // 워셔액 간격 최대(초)
     LIVES: 3,           // 목숨
     INVULN: 1.3,        // 부딪힌 뒤 무적 시간(초)
     HEART_FIRST: 15,    // 첫 하트가 나올 수 있는 시간(초)
@@ -189,7 +196,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   let t, score, lane, carX, goats, drops, spawnT, dropT;
   let heat, shownHeat, over, wipeHeld = false, holdTime = 0, sweep, wipeDir = 1;
   let wet = 0;
-  let lives, invuln = 0, hitShake = 0, hearts, heartT;
+  let lives, invuln = 0, hitShake = 0, hearts, heartT, washers, washerT;
   let hornCd = 0, lastSpeed = 0, speedPulse = 0;
   let cryT = 6, lightT = -1, nextLight = 8, onc = null, nextOnc = 15, glare = 0;
   let roadOff = 0, pops, crashT, flash = 0, barShake = 0, overShownAt = 0;
@@ -224,7 +231,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     goats = []; drops = []; wet = 0; spawnT = 0.8; dropT = C.DROP_EVERY;
     heat = 0; shownHeat = 0; over = false; holdTime = 0; sweep = null;
     pops = []; crashT = 0; flash = 0; barShake = 0;
-    lives = C.LIVES; invuln = 0; hitShake = 0; hearts = []; heartT = C.HEART_FIRST;
+    lives = C.LIVES; invuln = 0; hitShake = 0; hearts = []; heartT = C.HEART_FIRST; washers = []; washerT = C.WASHER_FIRST + Math.random() * 5;
     hornCd = 0; lastSpeed = 0; cryT = 3 + Math.random() * 4; lightT = -1; nextLight = 5 + Math.random() * 5; onc = null; nextOnc = C.ONCOMING_FROM + Math.random() * 5; glare = 0;
     wipeUp();
   }
@@ -537,6 +544,8 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       noise(0.15, { type: 'highpass', f: [[0, 2500]], gain: 0.25, delay });
       noise(2.2, { f: [[0, 400], [2.2, 60]], gain: 0.7, attack: 0.08, delay: delay + 0.05 });
     },
+    near() { noise(0.25, { type: 'bandpass', q: 1.5, f: [[0, 600], [0.25, 3000]], gain: 0.25, attack: 0.02 }); tone(0.15, { wave: 'triangle', f: [[0, 1200], [0.15, 1800]], gain: 0.08, delay: 0.05 }); },
+    washer() { noise(0.5, { type: 'highpass', f: [[0, 3000], [0.5, 6000]], gain: 0.3, attack: 0.03 }); [880, 1175, 1568].forEach((fr, i) => tone(0.15, { wave: 'triangle', f: [[0, fr]], gain: 0.12, delay: 0.1 + i * 0.07 })); },
     horn() {
       if (playSample({ buf: S.honkBuf, gain: 0.8 })) return;
       [415, 523].forEach(fr => tone(0.5, { wave: 'square', f: [[0, fr]], gain: 0.06, bp: 900, attack: 0.01 }));
@@ -677,17 +686,19 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   hookRanking();
 
   // 기록 저장. 이름을 한 번 적어 두면 그다음부터는 게임오버 때마다 자동으로 저장
+  let pendingScore = 0;
   async function submitScore(auto) {
-    if (!window.ranking || submitted || score <= 0) return;
-    const name = (auto ? savedName : nameInput.value).trim().slice(0, 10);
-    if (!name) { rankMsg.textContent = '이름을 적고 저장하면, 다음 판부터는 자동으로 저장돼요'; nameInput.focus(); return; }
+    const sc = pendingScore;
+    if (!window.ranking || submitted || sc <= 0) return;
+    const name = nameInput.value.trim().slice(0, 10);
+    if (!name) { if (!auto) { rankMsg.textContent = '이름을 적어 주세요'; nameInput.focus(); } return; }
     submitted = true;
     submitBtn.disabled = true; rankMsg.textContent = '저장하는 중…';
     try {
-      const id = await window.ranking.submit(name, Math.max(0, Math.min(9999, Math.floor(score))));
+      const id = await window.ranking.submit(name, Math.max(0, Math.min(9999, Math.floor(sc))));
       myIds.add(id);
       saveName(name);
-      rankMsg.textContent = auto ? '「' + name + '」 이름으로 자동 저장됐어요 🎉' : '저장 완료! 다음 판부터는 자동으로 저장돼요 🎉';
+      rankMsg.textContent = '「' + name + '」 이름으로 저장됐어요 🎉';
       renderRanks();
     } catch (e) {
       submitted = false;
@@ -706,7 +717,10 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitted ? changeName() : submitScore(false); } });
   nameInput.addEventListener('input', () => { if (submitted) submitBtn.disabled = !nameInput.value.trim() || nameInput.value.trim() === savedName; });
 
+  // 저장 안 하고 넘어가면 적혀 있는 이름으로 자동 저장
+  function flushSave() { if (rankOn && !submitted && pendingScore > 0 && nameInput.value.trim()) submitScore(true); }
   function startGame() {
+    flushSave();
     audioInit();
     startRain();
     reset();
@@ -840,6 +854,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     const mine = goats.filter(go => !go.escape && go.lane === lane && go.y - go.h / 2 < g.carTop + g.carH);
     const D = g.carH + g.laneW * 0.625;
     for (const go of mine) {
+      go.fled = true;
       // 비킬 수 있는 옆 차선: 그 근처에 다른 고라니가 없어야 함
       const side = [lane - 1, lane + 1].filter(l => l >= 0 && l <= 2 &&
         !goats.some(o => o !== go && !o.escape && o.lane === l && Math.abs(o.y - go.y) < D));
@@ -909,6 +924,19 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       const cx0 = carX - g.carW * 0.42, cx1 = carX + g.carW * 0.42;
       const cy0 = g.carTop + g.carH * 0.06, cy1 = g.carTop + g.carH * 0.95;
       invuln = Math.max(0, invuln - dt);
+      // 아슬아슬: 내 차선에 있던 고라니를 부딪히기 직전에 피하면 보너스
+      for (const go of goats) {
+        if (go.lane === lane && !go.escape) go.sameT = t;
+        if (go.nearDone || go.fled) continue;
+        const gy0 = go.y - go.h * 0.4, gy1 = go.y + go.h * 0.46;
+        if (cy0 < gy1 && cy1 > gy0) {
+          go.nearDone = true;
+          if (go.lane !== lane && go.sameT !== undefined && t - go.sameT < C.NEAR_TIME) {
+            score += C.NEAR_BONUS; sfx.near();
+            pops.push({ x: carX, y: g.carTop - 56, life: 0.9, text: '아슬아슬! +' + C.NEAR_BONUS, col: '#4fd1ff' });
+          }
+        }
+      }
       let hitGoat = null;
       for (const go of goats) {
         const gx = go.x;
@@ -945,6 +973,27 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
             return false;
           }
           return ht.y - hs < H;
+        });
+      }
+
+      // 워셔액 (가끔 떨어짐, 먹으면 열기 0 + 앞유리 깨끗)
+      if (state === 'play') {
+        washerT -= dt;
+        if (washerT <= 0) {
+          washerT = C.WASHER_MIN + Math.random() * (C.WASHER_MAX - C.WASHER_MIN);
+          washers.push({ lane: Math.floor(Math.random() * 3), y: -30, ph: 0 });
+        }
+        const ws = g.laneW * 0.17;
+        washers = washers.filter(w => {
+          w.y += speed * dt; w.ph += dt;
+          const wx = laneX(w.lane);
+          if (cx0 < wx + ws && cx1 > wx - ws && cy0 < w.y + ws && cy1 > w.y - ws) {
+            heat = 0; shownHeat = 0; over = false; wet = 0; drops = [];
+            sfx.washer();
+            pops.push({ x: carX, y: g.carTop - 34, life: 0.9, text: '🧴 깨끗!', col: '#7fd4ff' });
+            return false;
+          }
+          return w.y - ws < H;
         });
       }
 
@@ -1035,9 +1084,11 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
         bestStart.textContent = '(최고 ' + best + ')';
         submitted = false; submitBtn.disabled = false;
         nameInput.value = savedName;
-        rankMsg.textContent = score > 0 ? '' : '0점은 저장되지 않아요';
+        pendingScore = score;
+        rankMsg.textContent = score <= 0 ? '0점은 저장되지 않아요'
+          : savedName ? '이름 확인 후 저장을 누르세요 (그냥 넘어가면 이 이름으로 저장)'
+          : '이름을 적고 저장을 눌러 주세요';
         if (score <= 0) submitBtn.disabled = true;
-        else if (rankOn) submitScore(true);
         overOv.classList.remove('hidden');
         overShownAt = performance.now();
       }
@@ -1155,6 +1206,14 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       ctx.fillStyle = '#ff4f7b'; ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = '#ffd0dd'; ctx.stroke();
     }
+    if (washers) for (const w of washers) {
+      const wx = laneX(w.lane), bw = g.laneW * 0.2, bh = g.laneW * 0.3;
+      const bob = Math.sin(w.ph * 6) * 2;
+      ctx.fillStyle = '#2f8fe0'; rr(wx - bw / 2, w.y - bh / 2 + bob, bw, bh, 5); ctx.fill();
+      ctx.fillStyle = '#ffffff'; rr(wx - bw / 2 + 2, w.y - bh * 0.05 + bob, bw - 4, bh * 0.22, 2); ctx.fill();
+      ctx.fillStyle = '#ffd36b'; rr(wx - bw * 0.22, w.y - bh / 2 - bh * 0.18 + bob, bw * 0.44, bh * 0.2, 2); ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = '#bfe4ff'; rr(wx - bw / 2, w.y - bh / 2 + bob, bw, bh, 5); ctx.stroke();
+    }
     if (!(invuln > 0 && Math.floor(invuln * 10) % 2 === 0)) drawCar(carX, g.carTop, g.carW, g.carH);
 
     // 내리는 비
@@ -1210,6 +1269,13 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
           ctx.fillStyle = 'rgba(250,255,215,' + a.toFixed(3) + ')';
           ctx.beginPath(); ctx.arc(ex, ey, go.w * 0.035, 0, Math.PI * 2); ctx.fill();
         }
+      }
+      if (washers) for (const w of washers) {
+        const wx = laneX(w.lane), r = g.laneW * 0.5;
+        const wg = ctx.createRadialGradient(wx, w.y, 0, wx, w.y, r);
+        wg.addColorStop(0, 'rgba(80,170,255,' + (0.35 + Math.sin(w.ph * 6) * 0.1) + ')');
+        wg.addColorStop(1, 'rgba(80,170,255,0)');
+        ctx.fillStyle = wg; ctx.fillRect(wx - r, w.y - r, r * 2, r * 2);
       }
       if (hearts) for (const ht of hearts) {
         const hx = laneX(ht.lane), r = g.laneW * 0.5;
@@ -1396,6 +1462,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   document.getElementById('againBtn').addEventListener('click', startGame);
   // 게임오버 화면에서 시작 화면으로
   document.getElementById('homeBtn').addEventListener('click', () => {
+    flushSave();
     reset();
     state = 'start';
     overOv.classList.add('hidden');
