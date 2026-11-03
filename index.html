@@ -139,9 +139,9 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     JUMP_FROM: 8,       // 이 시간(초)부터 옆에서 튀어나오는 고라니
     JUMP_CHANCE: 0.35,
     JUMP_SPEED: 460,    // 옆으로 뛰는 속도 (px/초)
-    DROP_EVERY: 0.14,   // 빗방울 생성 간격
+    DROP_EVERY: 0.1,    // 빗방울 생성 간격
     DROP_MAX: 280,
-    WET_RATE: 0.16,     // 앞유리가 뿌예지는 속도 (초당, 1이 최대)
+    WET_RATE: 0.2,     // 앞유리가 뿌예지는 속도 (초당, 1이 최대)
     WET_CLEAR: 0.55,    // 최대 힘일 때 와이퍼 한 번에 걷히는 뿌연 정도
     WIPE_RAMP: 0.6,     // 꾹 눌러서 최대 힘이 될 때까지 걸리는 시간(초)
     DROP_CLEAR: 0.62,   // 최대 힘일 때 와이퍼 한 번에 닦이는 빗방울 비율
@@ -234,7 +234,8 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   const muteBtn = document.getElementById('muteBtn');
   muteBtn.textContent = S.muted ? '🔇' : '🔊';
   function audioInit() {
-    if (S.ac) { if (S.ac.state === 'suspended') S.ac.resume(); return; }
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    if (S.ac) { if (S.ac.state !== 'running') S.ac.resume(); return; }
     try {
       S.ac = new (window.AudioContext || window.webkitAudioContext)();
       S.master = S.ac.createGain();
@@ -246,6 +247,10 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
       makeGoatBuffers();
       loadGoatSample();
+      // 아이폰 등에서 오디오 잠금 해제용 무음 재생
+      const sil = S.ac.createBufferSource(); sil.buffer = S.ac.createBuffer(1, 1, S.ac.sampleRate);
+      sil.connect(S.ac.destination); sil.start(0);
+      S.ac.resume();
     } catch (e) { S.ac = null; }
   }
   function env(g, t0, peak, attack, dur) {
@@ -1360,6 +1365,8 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   window.addEventListener('keyup', e => { if (e.code === 'Space' || e.key === ' ') wipeUp(); });
   window.addEventListener('blur', wipeUp);
   document.addEventListener('contextmenu', e => e.preventDefault());
+  // 화면을 만지거나 키를 누를 때마다 오디오가 멈춰 있으면 다시 깨움
+  ['pointerdown', 'keydown', 'touchend'].forEach(ev => document.addEventListener(ev, () => { if (S.ac && S.ac.state !== 'running') S.ac.resume(); }, true));
 
   function bindBtn(btn, down, up) {
     btn.addEventListener('pointerdown', e => { e.preventDefault(); down(); });
