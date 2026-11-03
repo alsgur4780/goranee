@@ -27,7 +27,7 @@ html,body{height:100%;background:#05070d;color:#e8ecf4;font-family:-apple-system
 .rankList li.me{color:#7CFC9A}
 .rankMsg{font-size:12px;color:#8d97ab;min-height:16px}
 canvas{display:block;width:100%;height:100%}
-#controls{display:flex;gap:8px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:#070a12;border-top:1px solid #1c2333}
+#controls{position:relative;display:flex;gap:8px;padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));background:#070a12;border-top:1px solid #1c2333}
 .btn{flex:1;height:72px;border:none;border-radius:16px;background:#1b2234;color:#e8ecf4;font-size:28px;font-family:inherit;touch-action:none;cursor:pointer;transition:transform .05s,background .1s}
 .btn.pressed{transform:scale(.94);background:#2a3550}
 #wipeBtn{flex:1.25;margin-left:10px;background:#1d3a4f;font-size:30px}
@@ -46,6 +46,9 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
 .go{margin-top:6px;padding:16px 40px;border:none;border-radius:999px;background:#ffb347;color:#1a1206;font-size:20px;font-weight:900;font-family:inherit;cursor:pointer}
 .go:active{transform:scale(.96)}
 .hint{font-size:12px;color:#6c7588}
+#hornBtn{position:absolute;right:14px;top:-26px;z-index:4;width:50px;height:50px;border-radius:50%;border:2px solid #ffd36b;background:conic-gradient(#3a2f12 calc(var(--p,1)*360deg),#1a1d26 0);font-size:22px;cursor:pointer;touch-action:none;box-shadow:0 2px 10px rgba(0,0,0,.6)}
+#hornBtn.cool{border-color:#666;filter:grayscale(1)}
+#hornBtn.pressed{transform:scale(.92)}
 .guide2{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;max-width:310px}
 .guide2 div{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:9px 6px;font-size:13px;color:#d5dbe7}
 .guide2 b{margin-right:5px;color:#fff}
@@ -74,7 +77,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       <div class="guide2">
         <div><b>◀ ▶</b>차선 바꾸기</div>
         <div><b>🧽</b>꾹 눌러 와이퍼</div>
-        <div><b>🔥</b>오래 쓰면 과열</div>
+        <div><b>📯</b>경적 (↑ 키)</div>
         <div><b>❤️</b>목숨 3개</div>
       </div>
       <p class="soundTip">🔊 소리를 켜고 하세요</p>
@@ -118,6 +121,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     <button class="btn" id="leftBtn" aria-label="왼쪽">◀</button>
     <button class="btn" id="rightBtn" aria-label="오른쪽">▶</button>
     <button class="btn" id="wipeBtn" aria-label="와이퍼">🧽</button>
+    <button id="hornBtn" class="hidden" aria-label="경적">📯</button>
   </div>
 </div>
 <script>
@@ -153,6 +157,8 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     ONCOMING_FROM: 10,  // 이 시간(초)부터 맞은편 차
     ONCOMING_MIN: 12,   // 맞은편 차 간격 최소(초)
     ONCOMING_MAX: 22,   // 맞은편 차 간격 최대(초)
+    HORN_COOLDOWN: 10,  // 경적 쿨타임(초)
+    FLEE_SPEED: 750,    // 경적에 놀란 고라니가 옆으로 도망가는 속도 (px/초)
     LIVES: 3,           // 목숨
     INVULN: 1.3,        // 부딪힌 뒤 무적 시간(초)
     HEART_FIRST: 15,    // 첫 하트가 나올 수 있는 시간(초)
@@ -175,6 +181,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   const leftBtn = document.getElementById('leftBtn');
   const rightBtn = document.getElementById('rightBtn');
   const wipeBtn = document.getElementById('wipeBtn');
+  const hornBtn = document.getElementById('hornBtn');
 
   let W = 0, H = 0;
   let state = 'start';
@@ -182,6 +189,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   let heat, shownHeat, over, wipeHeld = false, holdTime = 0, sweep, wipeDir = 1;
   let wet = 0;
   let lives, invuln = 0, hitShake = 0, hearts, heartT;
+  let hornCd = 0;
   let cryT = 6, lightT = -1, nextLight = 8, onc = null, nextOnc = 15, glare = 0;
   let roadOff = 0, pops, crashT, flash = 0, barShake = 0, overShownAt = 0;
   const rain = [];
@@ -216,7 +224,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     heat = 0; shownHeat = 0; over = false; holdTime = 0; sweep = null;
     pops = []; crashT = 0; flash = 0; barShake = 0;
     lives = C.LIVES; invuln = 0; hitShake = 0; hearts = []; heartT = C.HEART_FIRST;
-    cryT = 3 + Math.random() * 4; lightT = -1; nextLight = 5 + Math.random() * 5; onc = null; nextOnc = C.ONCOMING_FROM + Math.random() * 5; glare = 0;
+    hornCd = 0; cryT = 3 + Math.random() * 4; lightT = -1; nextLight = 5 + Math.random() * 5; onc = null; nextOnc = C.ONCOMING_FROM + Math.random() * 5; glare = 0;
     wipeUp();
   }
 
@@ -520,6 +528,10 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       noise(0.15, { type: 'highpass', f: [[0, 2500]], gain: 0.25, delay });
       noise(2.2, { f: [[0, 400], [2.2, 60]], gain: 0.7, attack: 0.08, delay: delay + 0.05 });
     },
+    horn() {
+      [415, 523].forEach(fr => tone(0.5, { wave: 'square', f: [[0, fr]], gain: 0.06, bp: 900, attack: 0.01 }));
+      [415, 523].forEach(fr => tone(0.5, { wave: 'sawtooth', f: [[0, fr]], gain: 0.04, attack: 0.01 }));
+    },
     carPass() { noise(1.6, { type: 'bandpass', q: 0.7, f: [[0, 300], [0.9, 1400], [1.6, 250]], gain: 0.28, attack: 0.7 }); },
   };
   function startRain() {
@@ -704,7 +716,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     const D = g.carH + g.laneW * 0.625 + speedNow() * 0.3; // 차 길이 + 고라니 길이 + 반응 여유
     const s = new Set();
     for (const go of goats) {
-      if (Math.abs(go.y - y) >= D) continue;
+      if (Math.abs(go.y - y) >= D || go.escape) continue;
       // 옆으로 뛰어드는 중인 고라니는 지나가는 차선 전부를 막은 것으로 봄
       if (go.jump && go.path) go.path.forEach(l => s.add(l));
       else s.add(go.lane);
@@ -808,6 +820,30 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     wipeBtn.classList.remove('pressed');
   }
 
+  // 경적: 내 차선에 있는 고라니가 모두 옆 차선이나 화면 밖으로 도망
+  function honk() {
+    if (state !== 'play' || hornCd > 0) return;
+    hornCd = C.HORN_COOLDOWN;
+    sfx.horn();
+    const g = geom();
+    pops.push({ x: carX, y: g.carTop - 50, life: 0.8, text: '빠앙!', col: '#ffd36b' });
+    const mine = goats.filter(go => !go.escape && go.lane === lane && go.y - go.h / 2 < g.carTop + g.carH);
+    const D = g.carH + g.laneW * 0.625;
+    for (const go of mine) {
+      // 비킬 수 있는 옆 차선: 그 근처에 다른 고라니가 없어야 함
+      const side = [lane - 1, lane + 1].filter(l => l >= 0 && l <= 2 &&
+        !goats.some(o => o !== go && !o.escape && o.lane === l && Math.abs(o.y - go.y) < D));
+      if (side.length && Math.random() < 0.5) {
+        const to = side[Math.floor(Math.random() * side.length)];
+        go.path = [lane, to]; go.lane = to; go.jump = true; go.jumpSpeed = C.FLEE_SPEED;
+      } else {
+        // 화면 밖으로: 가까운 쪽 길가로
+        const dir = lane === 0 ? -1 : lane === 2 ? 1 : (Math.random() < 0.5 ? -1 : 1);
+        go.escape = dir; go.jump = false;
+      }
+    }
+  }
+
   function crash() {
     sfx.crash(); sfx.goatScream(); stopRain();
     state = 'crash';
@@ -843,7 +879,10 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       for (const go of goats) {
         go.ph += dt * 12;
         const tx = laneX(go.lane);
-        if (go.jump) {
+        if (go.escape) {
+          go.y += speed * dt;
+          go.x += go.escape * C.FLEE_SPEED * dt;
+        } else if (go.jump) {
           go.y += speed * dt;
           const dx = tx - go.x, step = (go.jumpSpeed || C.JUMP_SPEED) * dt;
           if (Math.abs(dx) <= step) { go.x = tx; go.jump = false; } else go.x += Math.sign(dx) * step;
@@ -851,6 +890,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       }
       const g = geom();
       goats = goats.filter(go => {
+        if (go.escape && (go.x < -go.w || go.x > W + go.w)) { score++; sfx.score(); pops.push({ x: carX, y: g.carTop - 34, life: 0.8, text: '+1', col: '#7CFC9A' }); return false; }
         if (go.y - go.h / 2 > H) { score++; sfx.score(); pops.push({ x: carX, y: g.carTop - 34, life: 0.8, text: '+1', col: '#7CFC9A' }); return false; }
         return true;
       });
@@ -968,6 +1008,10 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
 
     shownHeat += (Math.min(heat, 100) - shownHeat) * Math.min(1, dt * 12);
     wipeBtn.classList.toggle('hot', over && state === 'play');
+    if (state === 'play') hornCd = Math.max(0, hornCd - dt);
+    hornBtn.classList.toggle('hidden', state !== 'play');
+    hornBtn.classList.toggle('cool', hornCd > 0);
+    hornBtn.style.setProperty('--p', (1 - hornCd / C.HORN_COOLDOWN).toFixed(3));
 
     if (state === 'crash') {
       crashT -= dt;
@@ -1307,6 +1351,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     if (e.key === 'ArrowLeft') move(-1);
     else if (e.key === 'ArrowRight') move(1);
     else if (isSpace) wipeDown();
+    else if (e.key === 'ArrowUp') { e.preventDefault(); honk(); }
   });
   window.addEventListener('keyup', e => { if (e.code === 'Space' || e.key === ' ') wipeUp(); });
   window.addEventListener('blur', wipeUp);
@@ -1319,6 +1364,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   bindBtn(leftBtn, () => { leftBtn.classList.add('pressed'); move(-1); }, () => leftBtn.classList.remove('pressed'));
   bindBtn(rightBtn, () => { rightBtn.classList.add('pressed'); move(1); }, () => rightBtn.classList.remove('pressed'));
   bindBtn(wipeBtn, wipeDown, wipeUp);
+  bindBtn(hornBtn, () => { hornBtn.classList.add('pressed'); honk(); }, () => hornBtn.classList.remove('pressed'));
 
   document.getElementById('startBtn').addEventListener('click', startGame);
   document.getElementById('againBtn').addEventListener('click', startGame);
