@@ -131,7 +131,8 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     SPEED0: 300,        // 고라니 처음 속도 (px/초)
     SPEED_STEP: 50,     // SPEED_EVERY초마다 +50
     SPEED_EVERY: 8,
-    SPEED_MAX: 650,     // 속도 상한 (이 이상은 사람이 못 피함)
+    SPEED_MAX: Infinity, // 속도 상한 없음 (계속 빨라짐)
+    KMH: 0.27,          // 화면 속도(px/초)를 km/h로 바꾸는 비율
     JUMP_SAFE: 0.7,     // 옆 고라니가 다 건너온 뒤 차에 닿기까지 최소 시간(초)
     SPAWN0: 1.1,        // 처음 등장 간격 (초)
     SPAWN_MIN: 0.45,    // 최소 등장 간격
@@ -189,7 +190,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   let heat, shownHeat, over, wipeHeld = false, holdTime = 0, sweep, wipeDir = 1;
   let wet = 0;
   let lives, invuln = 0, hitShake = 0, hearts, heartT;
-  let hornCd = 0;
+  let hornCd = 0, lastSpeed = 0, speedPulse = 0;
   let cryT = 6, lightT = -1, nextLight = 8, onc = null, nextOnc = 15, glare = 0;
   let roadOff = 0, pops, crashT, flash = 0, barShake = 0, overShownAt = 0;
   const rain = [];
@@ -224,7 +225,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     heat = 0; shownHeat = 0; over = false; holdTime = 0; sweep = null;
     pops = []; crashT = 0; flash = 0; barShake = 0;
     lives = C.LIVES; invuln = 0; hitShake = 0; hearts = []; heartT = C.HEART_FIRST;
-    hornCd = 0; cryT = 3 + Math.random() * 4; lightT = -1; nextLight = 5 + Math.random() * 5; onc = null; nextOnc = C.ONCOMING_FROM + Math.random() * 5; glare = 0;
+    hornCd = 0; lastSpeed = 0; cryT = 3 + Math.random() * 4; lightT = -1; nextLight = 5 + Math.random() * 5; onc = null; nextOnc = C.ONCOMING_FROM + Math.random() * 5; glare = 0;
     wipeUp();
   }
 
@@ -871,6 +872,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     flash = Math.max(0, flash - dt * 2);
     barShake = Math.max(0, barShake - dt);
     hitShake = Math.max(0, hitShake - dt);
+    speedPulse = Math.max(0, speedPulse - dt);
     for (const p of pops) p.life -= dt;
     pops = pops.filter(p => p.life > 0);
 
@@ -1325,6 +1327,19 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       ctx.fillStyle = '#fff'; ctx.fillText(score, W / 2, 54);
       ctx.font = '700 12px -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.fillText('피한 고라니', W / 2, 74);
+      // 현재 속도 (하트 아래)
+      const sp = speedNow();
+      if (sp !== lastSpeed) { if (lastSpeed) speedPulse = 0.6; lastSpeed = sp; }
+      const kmh = Math.round(sp * C.KMH);
+      ctx.save();
+      ctx.textAlign = 'left';
+      const big = 1 + speedPulse * 0.5;
+      ctx.font = '900 ' + Math.round(15 * big) + 'px -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+      ctx.fillStyle = kmh < 120 ? '#ffffff' : kmh < 160 ? '#ffb347' : '#ff5a4f';
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.strokeText('🚗 ' + kmh + ' km/h', 12, 62);
+      ctx.fillText('🚗 ' + kmh + ' km/h', 12, 62);
+      ctx.restore();
       for (let i = 0; i < C.LIVES; i++) {
         heartPath(24 + i * 28, 30, 10);
         ctx.fillStyle = i < lives ? '#ff4f7b' : 'rgba(255,255,255,0.15)'; ctx.fill();
