@@ -54,6 +54,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
 .guide2 b{margin-right:5px;color:#fff}
 #bestStart{margin-left:6px;font-weight:700;opacity:.85}
 .btnRow{display:flex;gap:8px}
+.modeBtn{text-decoration:none;display:inline-flex;align-items:center;border-color:rgba(120,200,255,.6);background:rgba(80,160,255,.12);color:#9fd3ff}
 .homeBtn{border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:#e8ecf4}
 .recBtn{padding:10px 22px;border:1px solid rgba(255,211,107,.5);border-radius:999px;background:rgba(255,211,107,.1);color:#ffd36b;font-size:15px;font-weight:800;font-family:inherit;cursor:pointer}
 #recOv{z-index:6;justify-content:flex-start;padding-top:56px;background:#05070d}
@@ -84,7 +85,10 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       </div>
       <p class="soundTip">🔊 소리를 켜고 하세요</p>
       <button class="go" id="startBtn">출발</button>
-      <button class="recBtn" id="recBtnStart">🏆 기록 보기<span id="bestStart"></span></button>
+      <div class="btnRow">
+        <button class="recBtn" id="recBtnStart">🏆 기록 보기<span id="bestStart"></span></button>
+        <a class="recBtn modeBtn" href="3d.html">🎮 3D</a>
+      </div>
       <div class="hidden" id="rankStartBox"><ol id="rankStartList"></ol></div>
     </div>
     <div id="overOv" class="overlay hidden">
