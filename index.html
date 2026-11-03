@@ -198,6 +198,12 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   let wet = 0;
   let lives, invuln = 0, hitShake = 0, hearts, heartT, washers, washerT;
   let hornCd = 0, lastSpeed = 0, speedPulse = 0;
+  // 총점 옆에 뜨는 +점수 (짧은 시간에 여러 번 오르면 합쳐서 보여 줌)
+  let scorePop = null;
+  function addScorePop(n, col) {
+    if (scorePop && scorePop.life > 0.5) { scorePop.n += n; scorePop.life = 0.9; if (n > 1) scorePop.col = col; }
+    else scorePop = { n, life: 0.9, col };
+  }
   let cryT = 6, lightT = -1, nextLight = 8, onc = null, nextOnc = 15, glare = 0;
   let roadOff = 0, pops, crashT, flash = 0, barShake = 0, overShownAt = 0;
   const rain = [];
@@ -232,7 +238,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     heat = 0; shownHeat = 0; over = false; holdTime = 0; sweep = null;
     pops = []; crashT = 0; flash = 0; barShake = 0;
     lives = C.LIVES; invuln = 0; hitShake = 0; hearts = []; heartT = C.HEART_FIRST; washers = []; washerT = C.WASHER_FIRST + Math.random() * 5;
-    hornCd = 0; lastSpeed = 0; cryT = 3 + Math.random() * 4; lightT = -1; nextLight = 5 + Math.random() * 5; onc = null; nextOnc = C.ONCOMING_FROM + Math.random() * 5; glare = 0;
+    hornCd = 0; lastSpeed = 0; scorePop = null; cryT = 3 + Math.random() * 4; lightT = -1; nextLight = 5 + Math.random() * 5; onc = null; nextOnc = C.ONCOMING_FROM + Math.random() * 5; glare = 0;
     wipeUp();
   }
 
@@ -888,6 +894,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     barShake = Math.max(0, barShake - dt);
     hitShake = Math.max(0, hitShake - dt);
     speedPulse = Math.max(0, speedPulse - dt);
+    if (scorePop) { scorePop.life -= dt; if (scorePop.life <= 0) scorePop = null; }
     for (const p of pops) p.life -= dt;
     pops = pops.filter(p => p.life > 0);
 
@@ -916,8 +923,8 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       }
       const g = geom();
       goats = goats.filter(go => {
-        if (go.escape && (go.x < -go.w || go.x > W + go.w)) { score++; sfx.score(); pops.push({ x: carX, y: g.carTop - 34, life: 0.8, text: '+1', col: '#7CFC9A' }); return false; }
-        if (go.y - go.h / 2 > H) { score++; sfx.score(); pops.push({ x: carX, y: g.carTop - 34, life: 0.8, text: '+1', col: '#7CFC9A' }); return false; }
+        if (go.escape && (go.x < -go.w || go.x > W + go.w)) { score++; sfx.score(); addScorePop(1, '#7CFC9A'); return false; }
+        if (go.y - go.h / 2 > H) { score++; sfx.score(); addScorePop(1, '#7CFC9A'); return false; }
         return true;
       });
 
@@ -933,7 +940,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
           go.nearDone = true;
           if (go.lane !== lane && go.sameT !== undefined && t - go.sameT < C.NEAR_TIME) {
             score += C.NEAR_BONUS; sfx.near();
-            pops.push({ x: carX, y: g.carTop - 56, life: 0.9, text: '아슬아슬! +' + C.NEAR_BONUS, col: '#4fd1ff' });
+            pops.push({ x: carX, y: g.carTop - 56, life: 0.9, text: '아슬아슬!', col: '#4fd1ff' }); addScorePop(C.NEAR_BONUS, '#4fd1ff');
           }
         }
       }
@@ -1393,6 +1400,20 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       ctx.fillStyle = '#fff'; ctx.fillText(score, W / 2, 54);
       ctx.font = '700 12px -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.fillText('피한 고라니', W / 2, 74);
+      // 총점 옆 +점수
+      if (scorePop) {
+        ctx.save();
+        ctx.font = '900 42px -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+        const sw = ctx.measureText(String(score)).width;
+        ctx.textAlign = 'left';
+        ctx.globalAlpha = Math.min(1, scorePop.life / 0.4);
+        ctx.font = '900 20px -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+        const py = 44 - (0.9 - scorePop.life) * 14;
+        ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+        ctx.strokeText('+' + scorePop.n, W / 2 + sw / 2 + 6, py);
+        ctx.fillStyle = scorePop.col; ctx.fillText('+' + scorePop.n, W / 2 + sw / 2 + 6, py);
+        ctx.restore();
+      }
       // 현재 속도 (하트 아래)
       const sp = speedNow();
       if (sp !== lastSpeed) { if (lastSpeed) speedPulse = 0.6; lastSpeed = sp; }
