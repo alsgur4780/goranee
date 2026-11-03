@@ -1239,6 +1239,11 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       const w = new T.Mesh(new T.CylinderGeometry(0.34, 0.34, 0.25, 12), tire);
       w.rotation.z = Math.PI / 2; w.position.set(sx, 0.34, sz); car.add(w);
     }
+    if (player) {
+      // 운전석에서는 지붕, 유리, 차체 뒤쪽이 시야를 가리니 숨기고 보닛만 보이게
+      cabin.visible = false; roof.visible = false; body.visible = false;
+      const hood = box(1.8, 0.12, 1.3, paint); hood.position.set(0, 0.76, -1.45); hood.rotation.x = 0.06; car.add(hood);
+    }
     const tail = new T.MeshBasicMaterial({ color: 0xff2020 });
     const head = new T.MeshBasicMaterial({ color: 0xfff6c8 });
     for (const sx of [-0.62, 0.62]) {
@@ -1429,7 +1434,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     const cx3 = xOf(carX);
     R3.car.position.set(cx3, 0, 0);
     R3.car.rotation.y = -(laneX(lane) - carX) / g.laneW * 0.25;
-    R3.car.visible = !(invuln > 0 && Math.floor(invuln * 10) % 2 === 0);
+    R3.car.visible = true;
 
     // 고라니
     syncMap(R3.goats, goats, makeGoatMesh);
@@ -1475,8 +1480,13 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
 
     // 카메라 (차 뒤 위에서), 부딪히면 흔들림
     const shk = (state === 'crash' ? crashT * 16 : hitShake * 30) * 0.02;
-    camera.position.set(cx3 * 0.55 + (Math.random() - 0.5) * shk, 5.4 + (Math.random() - 0.5) * shk, 9.0);
-    camera.lookAt(cx3 * 0.55, 0, -22);
+    // 운전석 시점 (왼쪽 운전석 눈높이)
+    const yaw = R3.car.rotation.y;
+    const bob = state === 'play' ? Math.sin(now / 90) * 0.008 : 0;
+    const eyeX = cx3 - 0.38 * Math.cos(yaw);
+    camera.position.set(eyeX + (Math.random() - 0.5) * shk, 1.38 + bob + (Math.random() - 0.5) * shk, 0.12);
+    camera.lookAt(eyeX - Math.sin(yaw) * 30, 0.6, -30);
+    R3.yaw = yaw;
 
     // 앞유리가 젖으면 흐리게
     const blur = state === 'start' ? 0 : Math.round(wet * C.BLUR_MAX * 0.8 * 2) / 2;
@@ -1485,8 +1495,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     renderer.render(scene, camera);
 
     // 오버레이용 화면 위치 (열기 바, 상향등 눈부심)
-    const v = new T.Vector3(cx3, 1.6, 0.4).project(camera);
-    out.x = (v.x + 1) / 2 * W; out.y = (1 - v.y) / 2 * H;
+    out.x = W / 2; out.y = H * 0.6;
     if (onc) { const o = new T.Vector3(R3.opp.position.x, 0.7, R3.opp.position.z - 2).project(camera); out.ox = (o.x + 1) / 2 * W; out.oy = (1 - o.y) / 2 * H; }
     return out;
   }
@@ -1539,6 +1548,29 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       bg.addColorStop(1, 'rgba(255,250,225,' + (glare * 0.2).toFixed(3) + ')');
       ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
     }
+
+    // 운전석 앞유리 테두리 (지붕, 양쪽 기둥)
+    ctx.fillStyle = '#07080b';
+    ctx.fillRect(0, 0, W, H * 0.035);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(W * 0.1, 0); ctx.lineTo(W * 0.02, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(W, 0); ctx.lineTo(W * 0.9, 0); ctx.lineTo(W * 0.98, H); ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+    // 계기판과 핸들 (아래쪽)
+    {
+      const dy = H * 0.9;
+      ctx.fillStyle = '#0d0f14';
+      ctx.beginPath(); ctx.moveTo(0, dy + 6); ctx.quadraticCurveTo(W / 2, dy - 14, W, dy + 6); ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(80,140,220,0.5)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(W * 0.12, dy + 2); ctx.quadraticCurveTo(W / 2, dy - 15, W * 0.88, dy + 2); ctx.stroke();
+      // 핸들 윗부분 (차선 바꿀 때 살짝 돌아감)
+      ctx.save();
+      ctx.translate(W * 0.36, H * 1.02); ctx.rotate((typeof R3 !== 'undefined' && R3 && R3.yaw ? R3.yaw : 0) * -4);
+      ctx.strokeStyle = '#050507'; ctx.lineWidth = 14; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(0, 0, W * 0.27, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, W * 0.27 + 4, Math.PI * 1.2, Math.PI * 1.8); ctx.stroke();
+      ctx.restore();
+    }
+    if (invuln > 0) { ctx.strokeStyle = 'rgba(255,60,60,' + (0.5 * (Math.floor(invuln * 10) % 2)).toFixed(2) + ')'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, W, H); }
 
     // 열기 바 (차 바로 위)
     if (state !== 'start' && (shownHeat > 0.5 || over)) {
