@@ -164,6 +164,8 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     FLEE_SPEED: 750,    // 경적에 놀란 고라니가 옆으로 도망가는 속도 (px/초)
     NEAR_TIME: 0.4,     // 부딪히기 이 시간(초) 안에 피하면 아슬아슬 보너스
     NEAR_BONUS: 2,      // 아슬아슬 보너스 점수
+    COMBO_EVERY: 20,    // 안 맞고 연속으로 이만큼 피하면
+    COMBO_BONUS: 5,     // 콤보 보너스: 처음 +5, 이어서 +10, +15 ... (맞으면 처음부터)
     WASHER_FIRST: 12,   // 첫 워셔액이 나올 수 있는 시간(초)
     WASHER_MIN: 20,     // 워셔액 간격 최소(초)
     WASHER_MAX: 35,     // 워셔액 간격 최대(초)
@@ -199,7 +201,21 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   let lives, invuln = 0, hitShake = 0, hearts, heartT, washers, washerT;
   let hornCd = 0, lastSpeed = 0, speedPulse = 0;
   // 총점 옆에 뜨는 +점수 (짧은 시간에 여러 번 오르면 합쳐서 보여 줌)
-  let scorePop = null;
+  let scorePop = null, combo = 0, comboLevel = 0, comboPulse = 0;
+  // 연속으로 피한 수 세기, 20마리마다 보너스
+  function onAvoid() {
+    combo++;
+    if (combo % C.COMBO_EVERY === 0) {
+      comboLevel++;
+      const bonus = C.COMBO_BONUS * comboLevel;
+      score += bonus;
+      addScorePop(bonus, '#ffb347');
+      const g = geom();
+      pops.push({ x: carX, y: g.carTop - 72, life: 1.1, text: combo + '콤보! +' + bonus, col: '#ffb347' });
+      comboPulse = 0.8;
+      sfx.combo();
+    }
+  }
   function addScorePop(n, col) {
     if (scorePop && scorePop.life > 0.5) { scorePop.n += n; scorePop.life = 0.9; if (n > 1) scorePop.col = col; }
     else scorePop = { n, life: 0.9, col };
@@ -238,7 +254,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     heat = 0; shownHeat = 0; over = false; holdTime = 0; sweep = null;
     pops = []; crashT = 0; flash = 0; barShake = 0;
     lives = C.LIVES; invuln = 0; hitShake = 0; hearts = []; heartT = C.HEART_FIRST; washers = []; washerT = C.WASHER_FIRST + Math.random() * 5;
-    hornCd = 0; lastSpeed = 0; scorePop = null; cryT = 3 + Math.random() * 4; lightT = -1; nextLight = 5 + Math.random() * 5; onc = null; nextOnc = C.ONCOMING_FROM + Math.random() * 5; glare = 0;
+    hornCd = 0; lastSpeed = 0; scorePop = null; combo = 0; comboLevel = 0; comboPulse = 0; cryT = 3 + Math.random() * 4; lightT = -1; nextLight = 5 + Math.random() * 5; onc = null; nextOnc = C.ONCOMING_FROM + Math.random() * 5; glare = 0;
     wipeUp();
   }
 
@@ -550,6 +566,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       noise(0.15, { type: 'highpass', f: [[0, 2500]], gain: 0.25, delay });
       noise(2.2, { f: [[0, 400], [2.2, 60]], gain: 0.7, attack: 0.08, delay: delay + 0.05 });
     },
+    combo() { [660, 880, 1100, 1320].forEach((fr, i) => tone(0.16, { wave: 'square', f: [[0, fr]], gain: 0.06, bp: 1500, delay: i * 0.06 })); },
     near() { noise(0.25, { type: 'bandpass', q: 1.5, f: [[0, 600], [0.25, 3000]], gain: 0.25, attack: 0.02 }); tone(0.15, { wave: 'triangle', f: [[0, 1200], [0.15, 1800]], gain: 0.08, delay: 0.05 }); },
     washer() { noise(0.5, { type: 'highpass', f: [[0, 3000], [0.5, 6000]], gain: 0.3, attack: 0.03 }); [880, 1175, 1568].forEach((fr, i) => tone(0.15, { wave: 'triangle', f: [[0, fr]], gain: 0.12, delay: 0.1 + i * 0.07 })); },
     horn() {
@@ -894,6 +911,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
     barShake = Math.max(0, barShake - dt);
     hitShake = Math.max(0, hitShake - dt);
     speedPulse = Math.max(0, speedPulse - dt);
+    comboPulse = Math.max(0, comboPulse - dt);
     if (scorePop) { scorePop.life -= dt; if (scorePop.life <= 0) scorePop = null; }
     for (const p of pops) p.life -= dt;
     pops = pops.filter(p => p.life > 0);
@@ -923,8 +941,8 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       }
       const g = geom();
       goats = goats.filter(go => {
-        if (go.escape && (go.x < -go.w || go.x > W + go.w)) { score++; sfx.score(); addScorePop(1, '#7CFC9A'); return false; }
-        if (go.y - go.h / 2 > H) { score++; sfx.score(); addScorePop(1, '#7CFC9A'); return false; }
+        if (go.escape && (go.x < -go.w || go.x > W + go.w)) { score++; sfx.score(); addScorePop(1, '#7CFC9A'); onAvoid(); return false; }
+        if (go.y - go.h / 2 > H) { score++; sfx.score(); addScorePop(1, '#7CFC9A'); onAvoid(); return false; }
         return true;
       });
 
@@ -953,6 +971,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       }
       if (hitGoat) {
         lives--;
+        combo = 0; comboLevel = 0;
         if (lives <= 0) crash();
         else {
           sfx.hit(); sfx.goatScream();
@@ -1400,6 +1419,14 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       ctx.fillStyle = '#fff'; ctx.fillText(score, W / 2, 54);
       ctx.font = '700 12px -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.fillText('피한 고라니', W / 2, 74);
+      if (combo > 0) {
+        const cb = 1 + comboPulse * 0.5;
+        ctx.font = '900 ' + Math.round(13 * cb) + 'px -apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+        const ct = '🔥 ' + combo + '콤보 (' + (combo % C.COMBO_EVERY) + '/' + C.COMBO_EVERY + ' 다음 +' + C.COMBO_BONUS * (comboLevel + 1) + ')';
+        ctx.strokeText(ct, W / 2, 93);
+        ctx.fillStyle = '#ffb347'; ctx.fillText(ct, W / 2, 93);
+      }
       // 총점 옆 +점수
       if (scorePop) {
         ctx.save();
