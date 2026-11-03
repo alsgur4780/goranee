@@ -79,7 +79,7 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
       <div class="rank hidden" id="rankBox">
         <div class="nameRow">
           <input id="nameInput" maxlength="10" placeholder="이름 (10자까지)" autocomplete="off" enterkeyhint="done">
-          <button id="submitBtn">랭킹 등록</button>
+          <button id="submitBtn">저장</button>
         </div>
         <div class="rankMsg" id="rankMsg"></div>
         <div class="rankTitle">🌏 전체 랭킹 TOP 10</div>
@@ -547,7 +547,10 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   const rankMsg = document.getElementById('rankMsg');
   const myIds = new Set();
   let ranks = null, submitted = false, rankOn = false;
-  try { nameInput.value = localStorage.getItem('goranee_name') || ''; } catch (e) {}
+  let savedName = '';
+  try { savedName = localStorage.getItem('goranee_name') || ''; } catch (e) {}
+  nameInput.value = savedName;
+  function saveName(n) { savedName = n; try { localStorage.setItem('goranee_name', n); } catch (e) {} }
 
   function fillList(ol, rows, n) {
     ol.textContent = '';
@@ -576,24 +579,35 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
   window.addEventListener('ranking-ready', hookRanking);
   hookRanking();
 
-  async function submitScore() {
-    if (!window.ranking || submitted) return;
-    const name = nameInput.value.trim().slice(0, 10);
-    if (!name) { rankMsg.textContent = '이름을 적어 주세요'; nameInput.focus(); return; }
-    submitBtn.disabled = true; rankMsg.textContent = '등록하는 중…';
+  // 기록 저장. 이름을 한 번 적어 두면 그다음부터는 게임오버 때마다 자동으로 저장
+  async function submitScore(auto) {
+    if (!window.ranking || submitted || score <= 0) return;
+    const name = (auto ? savedName : nameInput.value).trim().slice(0, 10);
+    if (!name) { rankMsg.textContent = '이름을 적고 저장하면, 다음 판부터는 자동으로 저장돼요'; nameInput.focus(); return; }
+    submitted = true;
+    submitBtn.disabled = true; rankMsg.textContent = '저장하는 중…';
     try {
       const id = await window.ranking.submit(name, Math.max(0, Math.min(9999, Math.floor(score))));
-      myIds.add(id); submitted = true;
-      try { localStorage.setItem('goranee_name', name); } catch (e) {}
-      rankMsg.textContent = '등록 완료! 🎉';
+      myIds.add(id);
+      saveName(name);
+      rankMsg.textContent = auto ? '「' + name + '」 이름으로 자동 저장됐어요 🎉' : '저장 완료! 다음 판부터는 자동으로 저장돼요 🎉';
       renderRanks();
     } catch (e) {
+      submitted = false;
       submitBtn.disabled = false;
-      rankMsg.textContent = '등록에 실패했어요. 다시 눌러 주세요';
+      rankMsg.textContent = '저장에 실패했어요. 저장 버튼을 다시 눌러 주세요';
     }
   }
-  submitBtn.addEventListener('click', submitScore);
-  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitScore(); } });
+  // 이미 저장한 뒤 이름을 바꾸면 다음 판부터 적용
+  function changeName() {
+    const n = nameInput.value.trim().slice(0, 10);
+    if (!n || n === savedName) return;
+    saveName(n);
+    rankMsg.textContent = '다음 판부터 「' + n + '」 이름으로 저장돼요';
+  }
+  submitBtn.addEventListener('click', () => submitted ? changeName() : submitScore(false));
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitted ? changeName() : submitScore(false); } });
+  nameInput.addEventListener('input', () => { if (submitted) submitBtn.disabled = !nameInput.value.trim() || nameInput.value.trim() === savedName; });
 
   function startGame() {
     audioInit();
@@ -889,8 +903,10 @@ h2{font-size:26px;font-weight:900;color:#ff6b5e}
         else bestOver.textContent = '🏆 최고 기록 ' + best;
         bestStart.textContent = '🏆 최고 기록 ' + best;
         submitted = false; submitBtn.disabled = false;
-        rankMsg.textContent = score > 0 ? '' : '0점은 등록할 수 없어요';
+        nameInput.value = savedName;
+        rankMsg.textContent = score > 0 ? '' : '0점은 저장되지 않아요';
         if (score <= 0) submitBtn.disabled = true;
+        else if (rankOn) submitScore(true);
         overOv.classList.remove('hidden');
         overShownAt = performance.now();
       }
